@@ -12,6 +12,11 @@ def convert_ruby(text: str) -> str:
 	text = re.sub(r'(?<![\uFF5C|])([\u4E00-\u9FFF\u3005\u3006\u30F5\u30F6]{1,20})\(([\u3041-\u3096\u309B\u309C\u30A1-\u30FE\u30FC]{1,20})\)', r'<ruby>\1<rt>\2</rt></ruby>', text)
 	return text
 
+# === 1〜2桁の半角数字に span.tcy を付ける ===
+def wrap_tcy_numbers(text: str) -> str:
+	return re.sub(r'(?<![0-9])([0-9]{1,2})(?![0-9])', r'<span class="tcy">\1</span>', text)
+
+
 # === 段落変換関数（EPUB3向け） ===
 def convert_to_paragraphs(text: str) -> str:
 	lines = text.splitlines()
@@ -99,6 +104,7 @@ for i, txt_file in enumerate(txt_files):
 	h2 = lines[0].strip()
 	body_text = "\n".join(lines[1:])
 	body_converted = convert_ruby(body_text)
+	body_converted = wrap_tcy_numbers(body_converted)
 	body_paragraphs = convert_to_paragraphs(body_converted)
 
 	chapter_id = f"chapter{str(i+1).zfill(2)}"

@@ -39,3 +39,9 @@ hr.page-break {
 	page-break-after: always;
 	writing-mode: horizontal-tb;
 }
+
+
+.tcy {
+	-epub-text-combine: horizontal;
+	text-combine-upright: all;
+}
