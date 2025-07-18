@@ -2,17 +2,14 @@ import os
 from pathlib import Path
 import re
 import natsort
-
 import zipfile
-import shutil
-
 import shutil
 
 # === ルビ変換関数 ===
 def convert_ruby(text: str) -> str:
-	text = re.sub(r'[｜|]([^\s《｜|()]{1,50})《(.+?)》', r'<ruby>\1<rt>\2</rt></ruby>', text)
-	text = re.sub(r'(?<![｜|])([一-龯々〆ヵヶ]{1,20})《([ぁ-ゖ゛゜ーァ-ヾ]{1,20})》', r'<ruby>\1<rt>\2</rt></ruby>', text)
-	text = re.sub(r'(?<![｜|])([一-龯々〆ヵヶ]{1,20})\(([ぁ-ゖ゛゜ーァ-ヾ]{1,20})\)', r'<ruby>\1<rt>\2</rt></ruby>', text)
+	text = re.sub(r'[\uFF5C|]([^\s\u300A\uFF5C|()]{1,50})\u300A(.+?)\u300B', r'<ruby>\1<rt>\2</rt></ruby>', text)
+	text = re.sub(r'(?<![\uFF5C|])([\u4E00-\u9FFF\u3005\u3006\u30F5\u30F6]{1,20})\u300A([\u3041-\u3096\u309B\u309C\u30A1-\u30FE\u30FC]{1,20})\u300B', r'<ruby>\1<rt>\2</rt></ruby>', text)
+	text = re.sub(r'(?<![\uFF5C|])([\u4E00-\u9FFF\u3005\u3006\u30F5\u30F6]{1,20})\(([\u3041-\u3096\u309B\u309C\u30A1-\u30FE\u30FC]{1,20})\)', r'<ruby>\1<rt>\2</rt></ruby>', text)
 	return text
 
 # === 段落変換関数（EPUB3向け） ===
@@ -23,7 +20,7 @@ def convert_to_paragraphs(text: str) -> str:
 	empty_count = 0
 
 	for line in lines:
-		line_raw = line.rstrip('\r\n')  # 改行のみ除去
+		line_raw = line.rstrip('\r\n')
 		only_spaces = line_raw.strip()
 
 		# 空行系処理
@@ -44,7 +41,7 @@ def convert_to_paragraphs(text: str) -> str:
 
 		empty_count = 0
 
-		# 字送り判定（ただしスペースは保持）
+		# 字送り判定（スペースは保持）
 		if re.match(r'^(　|\s{2,})', line_raw):
 			if buffer:
 				result.append(f"<p>{''.join(buffer)}</p>")
@@ -59,14 +56,11 @@ def convert_to_paragraphs(text: str) -> str:
 
 	return "\n".join(result)
 
-
 # === パス設定 ===
 base_dir = Path(__file__).parent
 text_root = base_dir / "text"
-output_root = base_dir / "epub-output" / "OEBPS"
-output_root.mkdir(parents=True, exist_ok=True)
 
-# 作品フォルダの取得
+# === 作品フォルダの取得 ===
 subdirs = [d for d in text_root.iterdir() if d.is_dir()]
 if not subdirs:
 	print("エラー: text/ 配下に作品フォルダがありません。")
@@ -79,7 +73,16 @@ work_dir = subdirs[0]
 work_name = work_dir.name
 txt_files = natsort.natsorted(list(work_dir.glob("*.txt")), alg=natsort.IC)
 
-# ファイル名表示
+# === EPUB3 構成ファイルの出力とパッケージング ===
+epub_root = base_dir / "epub-output" / work_name
+output_root = epub_root / "OEBPS"
+meta_inf_dir = epub_root / "META-INF"
+
+# ディレクトリ作成
+output_root.mkdir(parents=True, exist_ok=True)
+meta_inf_dir.mkdir(parents=True, exist_ok=True)
+
+# === ファイル名表示 ===
 print(f"処理対象作品: {work_name}")
 print(f"出力ファイル名: {work_name}.epub")
 print(f"読み込みファイル（{len(txt_files)}件）:")
@@ -107,7 +110,8 @@ for i, txt_file in enumerate(txt_files):
 	xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <title>{filename}</title>
+	<title>{filename}</title>
+	<link rel="stylesheet" type="text/css" href="stylesheet.css" />
 </head>
 <body>
 <h1>{filename}</h1>
@@ -117,23 +121,22 @@ for i, txt_file in enumerate(txt_files):
 </body>
 </html>
 '''
+
 	out_path = output_root / f"{chapter_id}.xhtml"
 	out_path.write_text(xhtml, encoding="utf-8")
 	print(f"{out_path.name} を出力しました。")
 
-# === nav.xhtml（EPUB3目次）を出力 ===
+# === nav.xhtml を出力 ===
 nav_path = output_root / "nav.xhtml"
-
 nav_items = []
 for i, txt_file in enumerate(txt_files):
 	chapter_num = str(i + 1).zfill(2)
 	chapter_id = f"chapter{chapter_num}.xhtml"
-	title = txt_file.stem  # ファイル名をタイトルに
+	title = txt_file.stem
 	nav_items.append(f'<li><a href="{chapter_id}">{title}</a></li>')
 
 nav_xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml"
-	  xmlns:epub="http://www.idpf.org/2007/ops">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
 	<title>目次</title>
 </head>
@@ -151,11 +154,8 @@ nav_xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
 nav_path.write_text(nav_xhtml, encoding="utf-8")
 print("nav.xhtml（EPUB3目次）を出力しました。")
 
-
-# === content.opf（EPUB3用パッケージ）を出力 ===
+# === content.opf を出力 ===
 opf_path = output_root / "content.opf"
-
-# 各章の item と spine を生成
 manifest_items = []
 spine_items = []
 
@@ -166,10 +166,10 @@ for i, txt_file in enumerate(txt_files):
 	manifest_items.append(f'<item id="{chapter_id}" href="{xhtml_file}" media-type="application/xhtml+xml"/>')
 	spine_items.append(f'<itemref idref="{chapter_id}" />')
 
-# nav.xhtml の manifest entry（EPUB3では必須）
+# navとCSSの追加
 manifest_items.append('<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>')
+manifest_items.append('<item id="css" href="stylesheet.css" media-type="text/css"/>')
 
-# 1つの content.opf にまとめる
 content_opf = f'''<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -187,59 +187,41 @@ content_opf = f'''<?xml version="1.0" encoding="UTF-8"?>
 </package>
 '''
 
-# 書き出し
 opf_path.write_text(content_opf, encoding="utf-8")
 print("content.opf（EPUB3）を出力しました。")
 
-# === EPUB3 構成ファイルの出力とパッケージング ===
-epub_root = base_dir / "epub-output"
-meta_inf_dir = epub_root / "META-INF"
-meta_inf_dir.mkdir(parents=True, exist_ok=True)
-
-# --- mimetype を出力（非圧縮・先頭に必要） ---
-mimetype_path = epub_root / "mimetype"
-mimetype_path.write_text("application/epub+zip", encoding="utf-8")
-
-# --- META-INF/container.xml を出力 ---
+# === container.xml を出力 ===
 container_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0"
-  xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
-    <rootfile full-path="OEBPS/content.opf"
-      media-type="application/oebps-package+xml"/>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
 </container>
 '''
 (meta_inf_dir / "container.xml").write_text(container_xml, encoding="utf-8")
 
-# --- EPUB出力ファイルパス ---
-epub_output_path = epub_root / f"{work_name}.epub"
+# === mimetype ファイル（非圧縮） ===
+mimetype_path = epub_root / "mimetype"
+mimetype_path.write_text("application/epub+zip", encoding="utf-8")
 
-# --- ZIP (EPUB) の書き込み ---
-with zipfile.ZipFile(epub_output_path, "w", compression=zipfile.ZIP_STORED) as epub:
-	# mimetype（非圧縮・先頭）
-	epub.write(mimetype_path, "mimetype", compress_type=zipfile.ZIP_STORED)
-
-# 追記モードで他ファイルを追加
-with zipfile.ZipFile(epub_output_path, "a", compression=zipfile.ZIP_DEFLATED) as epub:
-	# META-INF/
-	for file in meta_inf_dir.glob("*"):
-		epub.write(file, f"META-INF/{file.name}")
-
-	# OEBPS/
-	for file in output_root.glob("*"):
-		epub.write(file, f"OEBPS/{file.name}")
-
-print(f"{epub_output_path.name} を出力しました。")
-
-
-# === スタイルシートテンプレートを OEBPS にコピー ===
+# === CSS コピー ===
 css_source = base_dir / "css-template" / "base.css"
 css_dest = output_root / "stylesheet.css"
-
 if css_source.exists():
 	shutil.copy(css_source, css_dest)
 	print("スタイルシート（stylesheet.css）をコピーしました。")
 else:
 	print("警告: css-template/base.css が見つかりません。")
 
+# === EPUB出力 ===
+epub_output_path = epub_root / f"{work_name}.epub"
+with zipfile.ZipFile(epub_output_path, "w", compression=zipfile.ZIP_STORED) as epub:
+	epub.write(mimetype_path, "mimetype", compress_type=zipfile.ZIP_STORED)
+
+with zipfile.ZipFile(epub_output_path, "a", compression=zipfile.ZIP_DEFLATED) as epub:
+	for file in meta_inf_dir.glob("*"):
+		epub.write(file, f"META-INF/{file.name}")
+	for file in output_root.glob("*"):
+		epub.write(file, f"OEBPS/{file.name}")
+
+print(f"{epub_output_path.name} を出力しました。")
