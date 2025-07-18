@@ -78,6 +78,25 @@ work_dir = subdirs[0]
 work_name = work_dir.name
 txt_files = natsort.natsorted(list(work_dir.glob("*.txt")), alg=natsort.IC)
 
+# 表紙画像の探索（jpg優先）
+cover_path = None
+for ext in [".jpg", ".png"]:
+	candidate = work_dir / f"cover{ext}"
+	if candidate.exists():
+		cover_path = candidate
+		break
+
+# 表紙画像をコピー
+if cover_path:
+	images_dir = output_root / "images"
+	images_dir.mkdir(parents=True, exist_ok=True)
+	cover_ext = cover_path.suffix.lower()
+	cover_name = f"cover{cover_ext}"
+	cover_dest = images_dir / cover_name
+	shutil.copy(cover_path, cover_dest)
+	print(f"表紙画像 {cover_name} を追加しました。")
+
+
 # === EPUB3 構成ファイルの出力とパッケージング ===
 epub_root = base_dir / "epub-output" / work_name
 output_root = epub_root / "OEBPS"
@@ -170,6 +189,12 @@ for i, txt_file in enumerate(txt_files):
 	chapter_id = f"chapter{chapter_num}"
 	xhtml_file = f"{chapter_id}.xhtml"
 	manifest_items.append(f'<item id="{chapter_id}" href="{xhtml_file}" media-type="application/xhtml+xml"/>')
+	# === 表紙画像の manifest 追加 ===
+	if cover_path:
+		cover_filename = f"images/{cover_path.name}"
+		manifest_items.append(f'<item id="cover-image" href="{cover_filename}" media-type="image/jpeg"/>'
+													if cover_path.suffix.lower() == ".jpg"
+													else f'<item id="cover-image" href="{cover_filename}" media-type="image/png"/>')
 	spine_items.append(f'<itemref idref="{chapter_id}" />')
 
 # navとCSSの追加
@@ -178,18 +203,19 @@ manifest_items.append('<item id="css" href="stylesheet.css" media-type="text/css
 
 content_opf = f'''<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="bookid">urn:uuid:txt2epub</dc:identifier>
-    <dc:title>{work_name}</dc:title>
-    <dc:language>ja</dc:language>
-    <meta property="dcterms:modified">2025-07-18T00:00:00Z</meta>
-  </metadata>
-  <manifest>
-    {chr(10).join(manifest_items)}
-  </manifest>
-  <spine>
-    {chr(10).join(spine_items)}
-  </spine>
+	<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+		<dc:identifier id="bookid">urn:uuid:txt2epub</dc:identifier>
+		<dc:title>{work_name}</dc:title>
+		<dc:language>ja</dc:language>
+		<meta property="dcterms:modified">2025-07-18T00:00:00Z</meta>
+		{'<meta name="cover" content="cover-image"/>' if cover_path else ''}
+	</metadata>
+	<manifest>
+		{chr(10).join(manifest_items)}
+	</manifest>
+	<spine>
+		{chr(10).join(spine_items)}
+	</spine>
 </package>
 '''
 
@@ -199,9 +225,9 @@ print("content.opf（EPUB3）を出力しました。")
 # === container.xml を出力 ===
 container_xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
+	<rootfiles>
+		<rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+	</rootfiles>
 </container>
 '''
 (meta_inf_dir / "container.xml").write_text(container_xml, encoding="utf-8")
