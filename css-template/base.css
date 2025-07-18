@@ -6,30 +6,36 @@ body {
 	font-family: serif;
 	line-height: 1.8;
 	font-size: 1em;
-	margin: 5%;
 }
 
-h1, h2 {
+h1{
+	font-size: 1.4em;
+	margin-inline: 1em 0 0.5em;
+}
+
+h2 {
 	font-size: 1.2em;
-	margin: 1em 0 0.5em;
-	text-align: center;
+	margin-inline: 1em 0 0.5em;
+	/* text-align: center; */
 }
 
 p {
 	text-indent: 1em;
-	margin: 0 0 1em 0;
+	margin-inline: 0 0 1em 0;
 }
 
 p.next-link {
-	text-align: left; /* ←縦書きでは「左」が下側 */
+	writing-mode: vertical-rl;
+	text-align: left;
 	font-size: 0.9em;
+	margin-inline: 3em 0 1em 0;
 }
 
 hr.page-break {
 	border: none;
 	width: 1px;
 	height: 100%;
-	margin: 0 1em;
+	margin-inline: 0 1em;
 	page-break-after: always;
 	writing-mode: horizontal-tb;
 }
